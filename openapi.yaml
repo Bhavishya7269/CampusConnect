@@ -1,0 +1,371 @@
+openapi: 3.1.0
+info:
+  title: CampusConnect API
+  version: 1.0.0
+  description: API contract for browsing campus events and managing event registrations.
+servers:
+  - url: http://localhost:5000
+    description: Local Flask API
+tags:
+  - name: Events
+  - name: Registrations
+paths:
+  /api/events:
+    get:
+      tags: [Events]
+      summary: Browse events
+      operationId: getEvents
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Category'
+      responses:
+        '200':
+          description: Events matching the supplied filters.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Event'
+
+  /api/events/{id}:
+    get:
+      tags: [Events]
+      summary: Get event details
+      operationId: getEventById
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: The requested event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/registrations:
+    post:
+      tags: [Registrations]
+      summary: Register the authenticated student for an event
+      operationId: createRegistration
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRegistrationRequest'
+      responses:
+        '201':
+          description: Registration created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Registration'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The authenticated student is already registered for this event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/me/registrations:
+    get:
+      tags: [Registrations]
+      summary: List the authenticated student's registrations
+      operationId: getMyRegistrations
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The student's registrations, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Registration'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/events/{id}/registrations:
+    get:
+      tags: [Registrations]
+      summary: List an event's attendees
+      description: Available only to the authenticated owner of the event.
+      operationId: getEventAttendees
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Attendees for the event, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Attendee'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: The authenticated user does not own the event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    EventId:
+      name: id
+      in: path
+      required: true
+      description: Stable event identifier.
+      schema:
+        type: string
+      example: evt-101
+    Search:
+      name: search
+      in: query
+      description: Case-insensitive search over the event title, tagline, venue, and tags.
+      schema:
+        type: string
+      example: figma
+    Category:
+      name: category
+      in: query
+      description: Event category. Omit it (or send `All`) to return every category.
+      schema:
+        type: string
+      example: Workshop
+
+  responses:
+    BadRequest:
+      description: The request body is malformed or misses a required field.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: A valid bearer token was not provided.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The requested resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Event:
+      type: object
+      required:
+        - id
+        - title
+        - category
+        - date
+        - venue
+        - capacity
+        - registeredCount
+        - organizer
+      properties:
+        id:
+          type: string
+          example: evt-101
+        title:
+          type: string
+          example: "HackCampus 2026: AI & Web3 Sprint"
+        tagline:
+          type: string
+        category:
+          type: string
+          example: Hackathon
+        date:
+          type: string
+          description: Human-readable event date for the current UI.
+          example: Nov 14 - 15, 2026
+        startTime:
+          type: string
+          example: "09:00 AM"
+        endTime:
+          type: string
+          example: "09:00 PM"
+        venue:
+          type: string
+        isOnline:
+          type: boolean
+        bannerUrl:
+          type: string
+          format: uri
+        description:
+          type: string
+        highlights:
+          type: array
+          items:
+            type: string
+        schedule:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduleItem'
+        capacity:
+          type: integer
+          minimum: 1
+        registeredCount:
+          type: integer
+          minimum: 0
+        price:
+          type: string
+          example: Free
+        status:
+          type: string
+          example: Upcoming
+        tags:
+          type: array
+          items:
+            type: string
+        organizer:
+          $ref: '#/components/schemas/Organizer'
+
+    Organizer:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        avatar:
+          type: string
+          format: uri
+        department:
+          type: string
+        email:
+          type: string
+          format: email
+
+    ScheduleItem:
+      type: object
+      required: [time, title]
+      properties:
+        time:
+          type: string
+        title:
+          type: string
+
+    CreateRegistrationRequest:
+      type: object
+      required: [eventId, studentId, name, email, department]
+      properties:
+        eventId:
+          type: string
+          example: evt-101
+        studentId:
+          type: string
+          example: CS2023-0491
+        name:
+          type: string
+          example: Alex Morgan
+        email:
+          type: string
+          format: email
+          example: alex.morgan@campus.edu
+        department:
+          type: string
+          example: Computer Science
+
+    Registration:
+      type: object
+      required:
+        - registrationId
+        - eventId
+        - registeredAt
+        - ticketCode
+        - status
+      properties:
+        registrationId:
+          type: string
+          example: reg-901
+        eventId:
+          type: string
+          example: evt-101
+        eventTitle:
+          type: string
+        eventDate:
+          type: string
+        eventVenue:
+          type: string
+        registeredAt:
+          type: string
+          format: date-time
+        userName:
+          type: string
+        userEmail:
+          type: string
+          format: email
+        studentId:
+          type: string
+        ticketCode:
+          type: string
+          example: CC-HCK-94812
+        status:
+          type: string
+          enum: [CONFIRMED, CANCELLED]
+        category:
+          type: string
+
+    Attendee:
+      type: object
+      required: [registrationId, userName, userEmail, studentId, registeredAt, checkInStatus]
+      properties:
+        registrationId:
+          type: string
+        userName:
+          type: string
+        userEmail:
+          type: string
+          format: email
+        studentId:
+          type: string
+        ticketCode:
+          type: string
+        department:
+          type: string
+        registeredAt:
+          type: string
+          format: date-time
+        checkInStatus:
+          type: string
+          enum: [Attending, Checked In, Absent]
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: conflict
+        message:
+          type: string
+          example: You are already registered for this event.
