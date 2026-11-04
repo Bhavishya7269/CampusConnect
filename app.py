@@ -9,11 +9,11 @@ from supabase import create_client, Client
 
 load_dotenv()
 
-supabase_url = os.environ.get("SUPABASE_URL")
-supabase_key = os.environ.get("SUPABASE_KEY")
+supabase_url = os.environ.get("SUPABASE_URL", "https://zyvaxxborvcqeieblddo.supabase.co")
+supabase_key = os.environ.get("SUPABASE_KEY", "sb_publishable_hunJKJzY7PTKDaFXdHWP2A_g5NhcpIq")
 
 if not supabase_url or not supabase_key:
-    raise RuntimeError("SUPABASE_URL and SUPABASE_KEY must be set in your .env file")
+    raise RuntimeError("SUPABASE_URL and SUPABASE_KEY must be set in your .env file or environment variables")
 
 sb: Client = create_client(supabase_url, supabase_key)
 app = FastAPI(
