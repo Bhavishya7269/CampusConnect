@@ -10,9 +10,12 @@ const STORAGE_MY_REGS_KEY = 'campusconnect_my_regs_v1';
 const STORAGE_EVENT_REGS_KEY = 'campusconnect_event_regs_v1';
 const STORAGE_CONFIG_KEY = 'campusconnect_api_config_v1';
 
+const PROD_API_URL = 'https://campusconnect-z88h.onrender.com';
+const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
 // Default configuration
 const DEFAULT_CONFIG = {
-  baseUrl: 'http://localhost:5001',
+  baseUrl: isLocalhost ? 'http://localhost:5001' : PROD_API_URL,
   useMock: false, // Default to Live Supabase API mode
   token: 'mock-bearer-token-student-alex',
   currentUserId: '4038c9b0-7160-4c45-a3cf-b595ed69cb42',
@@ -21,13 +24,16 @@ const DEFAULT_CONFIG = {
   isOrganizer: true
 };
 
-// Retrieve config with auto-migration from port 5000 to 5001
+// Retrieve config with auto-migration
 export function getApiConfig() {
   try {
     const saved = localStorage.getItem(STORAGE_CONFIG_KEY);
     if (!saved) return DEFAULT_CONFIG;
     const parsed = JSON.parse(saved);
-    if (parsed.baseUrl === 'http://localhost:5000') {
+    if (!isLocalhost && (parsed.baseUrl?.includes('localhost') || parsed.baseUrl?.includes('127.0.0.1'))) {
+      parsed.baseUrl = PROD_API_URL;
+      localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(parsed));
+    } else if (parsed.baseUrl === 'http://localhost:5000') {
       parsed.baseUrl = 'http://localhost:5001';
       localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(parsed));
     }
