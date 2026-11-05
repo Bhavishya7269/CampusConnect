@@ -1,0 +1,28 @@
+services:
+  # Python FastAPI Backend
+  - type: web
+    name: CampusConnect
+    runtime: python
+    region: singapore
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SUPABASE_URL
+        value: https://zyvaxxborvcqeieblddo.supabase.co
+      - key: SUPABASE_KEY
+        value: sb_publishable_hunJKJzY7PTKDaFXdHWP2A_g5NhcpIq
+
+  # React Vite Frontend Static Site
+  - type: web
+    name: CampusConnect-Frontend
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://hello-world-workshop.onrender.com/api/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
