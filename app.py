@@ -125,6 +125,57 @@ EVENT_PRESETS: Dict[str, Dict[str, Any]] = {
             "Free cloud credits and workshop certificate"
         ],
         "tags": ["Postgres", "Databases", "ACID", "Backend Architecture"]
+    },
+    "ai & ml workshop": {
+        "category": "Tech & AI",
+        "tagline": "Hands-on deep dive into modern machine learning, PyTorch models, and generative AI",
+        "date": "Nov 15, 2026",
+        "startTime": "10:00 AM",
+        "endTime": "04:30 PM",
+        "venue": "Tech Auditorium 1, Innovation Hub",
+        "bannerUrl": "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&auto=format&fit=crop&q=80",
+        "description": "Master machine learning fundamentals and modern neural architectures. Build, train, and deploy real computer vision and NLP models on GPU-accelerated cloud instances.",
+        "highlights": [
+            "End-to-end PyTorch & Hugging Face pipeline",
+            "Fine-tuning open weights LLMs on campus datasets",
+            "Hands-on coding lab with Google Colab GPUs",
+            "Certificate of Completion and AI project kit"
+        ],
+        "tags": ["Artificial Intelligence", "Machine Learning", "PyTorch", "Python", "Data Science"]
+    },
+    "hackathon 2026": {
+        "category": "Hackathon",
+        "tagline": "36-hour flagship sprint building next-generation web3, AI, and campus innovations",
+        "date": "Nov 20, 2026",
+        "startTime": "09:00 AM",
+        "endTime": "09:00 PM",
+        "venue": "Main Arena & Computing Labs, Science Complex",
+        "bannerUrl": "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=1200&auto=format&fit=crop&q=80",
+        "description": "Over 350 student innovators, engineers, and designers collaborate for 36 hours. Pitch to industry judges, receive 1-on-1 mentorship, and compete for cash prizes exceeding $10,000.",
+        "highlights": [
+            "$10,000+ prize pool & cloud compute grants",
+            "Mentorship from leading industry software engineers",
+            "Free meals, midnight energy drinks, and swag bags",
+            "Fast-track internship interviews for finalists"
+        ],
+        "tags": ["Hackathon", "React", "AI", "Cloud", "Full Stack"]
+    },
+    "web development seminar": {
+        "category": "Workshop",
+        "tagline": "Production-grade modern full stack architecture with React, Next.js, and cloud databases",
+        "date": "Oct 25, 2026",
+        "startTime": "02:00 PM",
+        "endTime": "05:00 PM",
+        "venue": "Seminar Hall 2, School of Computing",
+        "bannerUrl": "https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?w=1200&auto=format&fit=crop&q=80",
+        "description": "Explore production full stack web engineering. Learn component-driven design, serverless backend functions, real-time database syncing, and automated CI/CD pipelines.",
+        "highlights": [
+            "Clean architecture and state management patterns",
+            "Real-time database integration with Supabase",
+            "Live deployment on cloud infrastructure",
+            "Interactive Q&A with senior lead engineers"
+        ],
+        "tags": ["Web Development", "React", "JavaScript", "Frontend", "APIs"]
     }
 }
 
