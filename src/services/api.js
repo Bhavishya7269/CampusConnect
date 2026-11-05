@@ -10,15 +10,23 @@ const STORAGE_MY_REGS_KEY = 'campusconnect_my_regs_v1';
 const STORAGE_EVENT_REGS_KEY = 'campusconnect_event_regs_v1';
 const STORAGE_CONFIG_KEY = 'campusconnect_api_config_v1';
 
-const PROD_API_URL = 'https://campusconnect-z88h.onrender.com';
-const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+// Target workshop backend
+export const WORKSHOP_API_URL = 'https://hello-world-workshop.onrender.com';
+export const CAMPUSCONNECT_PROD_URL = 'https://campusconnect-z88h.onrender.com';
 
-// Default configuration
-const DEFAULT_CONFIG = {
-  baseUrl: isLocalhost ? 'http://localhost:5001' : PROD_API_URL,
-  useMock: false, // Default to Live Supabase API mode
+const isLocalhost = typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' || 
+  window.location.hostname === '127.0.0.1' ||
+  window.location.hostname === '0.0.0.0'
+);
+
+// Default configuration connected to workshop backend
+export const DEFAULT_CONFIG = {
+  // On localhost, use relative empty string so Vite dev server proxies /api to avoid CORS
+  baseUrl: isLocalhost ? '' : WORKSHOP_API_URL,
+  useMock: false,
   token: 'mock-bearer-token-student-alex',
-  currentUserId: '4038c9b0-7160-4c45-a3cf-b595ed69cb42',
+  currentUserId: 'afe3e3e8-1da8-4994-ad64-204224881b51', // Hemant Sharma on hello-world-workshop
   currentUserName: 'Hemant Sharma',
   currentUserEmail: 'hemant.sharma@intellipaat.com',
   isOrganizer: true
@@ -30,14 +38,24 @@ export function getApiConfig() {
     const saved = localStorage.getItem(STORAGE_CONFIG_KEY);
     if (!saved) return DEFAULT_CONFIG;
     const parsed = JSON.parse(saved);
-    if (!isLocalhost && (parsed.baseUrl?.includes('localhost') || parsed.baseUrl?.includes('127.0.0.1'))) {
-      parsed.baseUrl = PROD_API_URL;
-      localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(parsed));
-    } else if (parsed.baseUrl === 'http://localhost:5000') {
-      parsed.baseUrl = 'http://localhost:5001';
-      localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(parsed));
+    
+    // Auto-update legacy ports/URLs
+    if (isLocalhost) {
+      parsed.baseUrl = '';
+    } else if (!parsed.baseUrl || parsed.baseUrl.includes('localhost') || parsed.baseUrl.includes('5000') || parsed.baseUrl.includes('5001')) {
+      parsed.baseUrl = WORKSHOP_API_URL;
     }
-    return { ...DEFAULT_CONFIG, ...parsed };
+    
+    // Always enforce useMock: false and target current workshop backend
+    parsed.useMock = false;
+    if (!parsed.currentUserId || parsed.currentUserId === '4038c9b0-7160-4c45-a3cf-b595ed69cb42') {
+      parsed.currentUserId = 'afe3e3e8-1da8-4994-ad64-204224881b51';
+      parsed.currentUserName = 'Hemant Sharma';
+      parsed.currentUserEmail = 'hemant.sharma@intellipaat.com';
+    }
+
+    localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(parsed));
+    return { ...DEFAULT_CONFIG, ...parsed, useMock: false };
   } catch (e) {
     return DEFAULT_CONFIG;
   }
@@ -48,21 +66,6 @@ export function saveApiConfig(newConfig) {
   localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(newConfig));
   window.dispatchEvent(new CustomEvent('campusconnect:config-updated', { detail: newConfig }));
 }
-
-// Initialize mock storage if not present
-function initializeMockStorage() {
-  if (!localStorage.getItem(STORAGE_EVENTS_KEY)) {
-    localStorage.setItem(STORAGE_EVENTS_KEY, JSON.stringify(INITIAL_EVENTS));
-  }
-  if (!localStorage.getItem(STORAGE_MY_REGS_KEY)) {
-    localStorage.setItem(STORAGE_MY_REGS_KEY, JSON.stringify(INITIAL_MY_REGISTRATIONS));
-  }
-  if (!localStorage.getItem(STORAGE_EVENT_REGS_KEY)) {
-    localStorage.setItem(STORAGE_EVENT_REGS_KEY, JSON.stringify(INITIAL_EVENT_REGISTRATIONS));
-  }
-}
-
-initializeMockStorage();
 
 // Helper for logging requests to UI listener
 function logApiTransaction(method, endpoint, status, data, error = null) {
@@ -79,9 +82,147 @@ function logApiTransaction(method, endpoint, status, data, error = null) {
   return transaction;
 }
 
+// Normalizer to format raw backend events into rich UI event objects
+export function normalizeEvent(raw) {
+  if (!raw || typeof raw !== 'object') return raw;
+
+  const id = String(raw.id || '');
+  const title = String(raw.title || 'Campus Event');
+  const titleLower = title.toLowerCase();
+
+  // Parse ISO timestamp into human-readable date & time
+  let dateStr = raw.date;
+  let timeStr = raw.startTime;
+  if (!dateStr && raw.timestamp) {
+    try {
+      const d = new Date(raw.timestamp);
+      if (!isNaN(d.getTime())) {
+        dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      }
+    } catch (e) {
+      // fallback
+    }
+  }
+  if (!dateStr) dateStr = 'Nov 15, 2026';
+  if (!timeStr) timeStr = '10:00 AM';
+
+  // Determine category
+  let category = raw.category;
+  if (!category) {
+    if (titleLower.includes('hack')) category = 'Hackathon';
+    else if (titleLower.includes('seminar')) category = 'Seminar';
+    else if (titleLower.includes('summit')) category = 'Summit';
+    else if (titleLower.includes('meetup')) category = 'Meetup';
+    else if (titleLower.includes('night') || titleLower.includes('social') || titleLower.includes('frequencies')) category = 'Social & Tech';
+    else if (titleLower.includes('robot') || titleLower.includes('line follower')) category = 'Robotics';
+    else if (titleLower.includes('design') || titleLower.includes('studio') || titleLower.includes('creative') || titleLower.includes('retrospective')) category = 'Design & Arts';
+    else if (titleLower.includes('api') || titleLower.includes('python') || titleLower.includes('flask') || titleLower.includes('code')) category = 'Coding';
+    else if (titleLower.includes('ai') || titleLower.includes('agent') || titleLower.includes('machine')) category = 'Tech & AI';
+    else category = 'Workshop';
+  }
+
+  // Curated banner photos based on category
+  const categoryBanners = {
+    'Tech & AI': 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&auto=format&fit=crop&q=80',
+    'Hackathon': 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=1200&auto=format&fit=crop&q=80',
+    'Robotics': 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=1200&auto=format&fit=crop&q=80',
+    'Design & Arts': 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1200&auto=format&fit=crop&q=80',
+    'Coding': 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&auto=format&fit=crop&q=80',
+    'Seminar': 'https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?w=1200&auto=format&fit=crop&q=80',
+    'Summit': 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=1200&auto=format&fit=crop&q=80',
+    'Social & Tech': 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=1200&auto=format&fit=crop&q=80',
+    'Workshop': 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1200&auto=format&fit=crop&q=80'
+  };
+
+  const bannerUrl = raw.bannerUrl || categoryBanners[category] || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=1200&auto=format&fit=crop&q=80';
+
+  return {
+    id,
+    title,
+    tagline: raw.tagline || `Join fellow students for ${title}. Hands-on session with industry leads.`,
+    category,
+    date: dateStr,
+    startTime: timeStr,
+    endTime: raw.endTime || '04:30 PM',
+    venue: raw.venue || 'Main Innovation Hub & Computing Lab',
+    isOnline: Boolean(raw.isOnline),
+    bannerUrl,
+    description: raw.description || `Immerse yourself in ${title}. Collaborate on practical applications, network with student engineers, and build real portfolio-ready artifacts.`,
+    highlights: Array.isArray(raw.highlights) && raw.highlights.length ? raw.highlights : [
+      'Official Certificate of Participation',
+      'Hands-on interactive guided workshop exercises',
+      'Direct networking with mentors and alumni',
+      'Free snacks, energy drinks, and official swag kit'
+    ],
+    schedule: Array.isArray(raw.schedule) && raw.schedule.length ? raw.schedule : [
+      { time: timeStr, title: 'Check-in & Welcome Keynote' },
+      { time: '01:00 PM', title: 'Hands-on Main Workshop Session' },
+      { time: '03:30 PM', title: 'Live Demonstrations & Q&A' },
+      { time: '04:30 PM', title: 'Certificates & Wrap-up' }
+    ],
+    capacity: Number(raw.capacity) || 100,
+    registeredCount: Number(raw.registeredCount) || 0,
+    price: raw.price || 'Free',
+    status: raw.status || 'active',
+    tags: Array.isArray(raw.tags) && raw.tags.length ? raw.tags : [category, 'Campus', 'Technology', 'Community'],
+    organizer: raw.organizer && typeof raw.organizer === 'object' ? raw.organizer : {
+      id: raw.organiser_id || 'afe3e3e8-1da8-4994-ad64-204224881b51',
+      name: 'Hemant Sharma',
+      department: 'Lead Organizer · Campus Council',
+      email: 'hemant.sharma@intellipaat.com',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+      isOwner: true
+    },
+    organiser_id: raw.organiser_id,
+    organizer_id: raw.organiser_id
+  };
+}
+
+// Resilient fetch wrapper with CORS fallback
+async function fetchBackend(endpoint, options = {}) {
+  const config = getApiConfig();
+  const base = config.baseUrl;
+  const primaryUrl = `${base}${endpoint}`;
+
+  const defaultHeaders = {
+    'Accept': 'application/json',
+    'X-User-Id': config.currentUserId,
+    'Authorization': `Bearer ${config.token}`
+  };
+
+  try {
+    const res = await fetch(primaryUrl, {
+      ...options,
+      headers: {
+        ...defaultHeaders,
+        ...(options.headers || {})
+      }
+    });
+    return res;
+  } catch (err) {
+    // If running in browser and direct workshop backend had CORS restriction, route via campusconnect proxy
+    if (!isLocalhost && base !== CAMPUSCONNECT_PROD_URL) {
+      try {
+        const proxyUrl = `${CAMPUSCONNECT_PROD_URL}${endpoint}`;
+        return await fetch(proxyUrl, {
+          ...options,
+          headers: {
+            ...defaultHeaders,
+            ...(options.headers || {})
+          }
+        });
+      } catch (proxyErr) {
+        throw err;
+      }
+    }
+    throw err;
+  }
+}
+
 /**
  * 1. GET /api/events
- * Browse events with optional search, category, and date filtering
+ * Browse events from the connected backend
  */
 export async function getEvents(filters = {}) {
   const config = getApiConfig();
@@ -89,51 +230,40 @@ export async function getEvents(filters = {}) {
 
   if (!config.useMock) {
     try {
-      const queryParams = new URLSearchParams();
-      if (filters.search) queryParams.set('search', filters.search);
-      if (filters.category && filters.category !== 'All') queryParams.set('category', filters.category);
-      
-      const url = `${config.baseUrl}${endpoint}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
-      const res = await fetch(url, {
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${config.token}`
-        }
-      });
-
+      const res = await fetchBackend(endpoint);
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: Failed to fetch events`);
+        throw new Error(`HTTP ${res.status}: Failed to fetch events from backend`);
       }
-      const data = await res.json();
-      logApiTransaction('GET', endpoint, res.status, data);
-      return data;
+      const rawEvents = await res.json();
+      
+      let events = Array.isArray(rawEvents) ? rawEvents.map(normalizeEvent) : [];
+
+      // Client-side filtering for category & search
+      if (filters.category && filters.category !== 'All') {
+        events = events.filter(e => e.category?.toLowerCase() === filters.category.toLowerCase());
+      }
+      if (filters.search) {
+        const q = filters.search.toLowerCase();
+        events = events.filter(e =>
+          e.title?.toLowerCase().includes(q) ||
+          e.tagline?.toLowerCase().includes(q) ||
+          e.venue?.toLowerCase().includes(q) ||
+          (e.tags && e.tags.some(t => t.toLowerCase().includes(q)))
+        );
+      }
+
+      logApiTransaction('GET', endpoint, res.status, events);
+      return events;
     } catch (err) {
       logApiTransaction('GET', endpoint, 'ERR', null, err);
-      console.warn('Real API failed, falling back to mock data:', err);
-      // Fallback to mock on error so user UI never breaks
+      console.warn('Backend fetch failed, falling back to cached events:', err);
     }
   }
 
-  // --- MOCK IMPLEMENTATION ---
-  await new Promise((r) => setTimeout(r, 220)); // Realistic network latency
-  const events = JSON.parse(localStorage.getItem(STORAGE_EVENTS_KEY) || '[]');
-  
-  let filtered = [...events];
-  if (filters.category && filters.category !== 'All') {
-    filtered = filtered.filter(e => e.category.toLowerCase() === filters.category.toLowerCase());
-  }
-  if (filters.search) {
-    const q = filters.search.toLowerCase();
-    filtered = filtered.filter(e => 
-      e.title.toLowerCase().includes(q) || 
-      e.tagline.toLowerCase().includes(q) ||
-      e.venue.toLowerCase().includes(q) ||
-      (e.tags && e.tags.some(t => t.toLowerCase().includes(q)))
-    );
-  }
-
-  logApiTransaction('GET', endpoint, 200, filtered);
-  return filtered;
+  // Fallback to local storage
+  const local = JSON.parse(localStorage.getItem(STORAGE_EVENTS_KEY) || '[]');
+  logApiTransaction('GET', endpoint, 200, local);
+  return local;
 }
 
 /**
@@ -146,45 +276,31 @@ export async function getEventById(eventId) {
 
   if (!config.useMock) {
     try {
-      const url = `${config.baseUrl}${endpoint}`;
-      const res = await fetch(url, {
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${config.token}`
-        }
-      });
-
+      const res = await fetchBackend(endpoint);
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: Event not found`);
       }
       const data = await res.json();
-      logApiTransaction('GET', endpoint, res.status, data);
-      return data;
+      const normalized = normalizeEvent(data);
+      logApiTransaction('GET', endpoint, res.status, normalized);
+      return normalized;
     } catch (err) {
       logApiTransaction('GET', endpoint, 'ERR', null, err);
-      console.warn('Real API failed, falling back to mock data:', err);
+      console.warn('Real API failed for event by id, checking cached list:', err);
     }
   }
 
-  // --- MOCK IMPLEMENTATION ---
-  await new Promise((r) => setTimeout(r, 180));
   const events = JSON.parse(localStorage.getItem(STORAGE_EVENTS_KEY) || '[]');
-  const event = events.find(e => e.id === eventId);
-  
-  if (!event) {
-    logApiTransaction('GET', endpoint, 404, null, new Error('Event not found'));
+  const found = events.find(e => String(e.id) === String(eventId));
+  if (!found) {
     throw new Error('Event not found');
   }
-
-  logApiTransaction('GET', endpoint, 200, event);
-  return event;
+  return normalizeEvent(found);
 }
 
 /**
  * 3. POST /api/registrations
- * Register current user for an event
- * Returns HTTP 201 Created on success
- * Returns HTTP 409 Conflict if already registered
+ * Register current student for an event
  */
 export async function createRegistration({ eventId, studentInfo = {} }) {
   const config = getApiConfig();
@@ -192,21 +308,19 @@ export async function createRegistration({ eventId, studentInfo = {} }) {
 
   if (!config.useMock) {
     try {
-      const url = `${config.baseUrl}${endpoint}`;
       const payload = {
-        eventId,
+        event_id: eventId,
+        eventId: eventId,
         studentId: studentInfo.studentId || 'CS2023-0491',
         name: studentInfo.name || config.currentUserName,
         email: studentInfo.email || config.currentUserEmail,
         department: studentInfo.department || 'Computer Science'
       };
 
-      const res = await fetch(url, {
+      const res = await fetchBackend(endpoint, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${config.token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
       });
@@ -214,93 +328,64 @@ export async function createRegistration({ eventId, studentInfo = {} }) {
       const responseData = await res.json().catch(() => null);
 
       if (res.status === 409) {
-        logApiTransaction('POST', endpoint, 409, responseData, new Error('Already registered for this event (HTTP 409)'));
         const err = new Error('Already registered for this event');
         err.status = 409;
+        logApiTransaction('POST', endpoint, 409, responseData, err);
         throw err;
       }
 
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${responseData?.message || 'Registration failed'}`);
+        throw new Error(`HTTP ${res.status}: ${responseData?.error || responseData?.message || 'Registration failed'}`);
       }
 
-      logApiTransaction('POST', endpoint, 201, responseData);
-      return { status: 201, data: responseData };
+      const pass = {
+        registrationId: responseData?.id || 'reg-' + Date.now(),
+        eventId,
+        eventTitle: studentInfo.eventTitle || 'Campus Event',
+        ticketCode: 'CC-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
+        registeredAt: new Date().toISOString(),
+        userName: studentInfo.name || config.currentUserName,
+        userEmail: studentInfo.email || config.currentUserEmail,
+        status: 'CONFIRMED'
+      };
+
+      logApiTransaction('POST', endpoint, res.status, pass);
+      return { status: 201, data: pass };
     } catch (err) {
       if (err.status === 409) throw err;
       logApiTransaction('POST', endpoint, 'ERR', null, err);
-      console.warn('Real API failed, fallback to mock registration logic:', err);
+      console.warn('Real registration API failed, saving locally:', err);
     }
   }
 
-  // --- MOCK IMPLEMENTATION ---
-  await new Promise((r) => setTimeout(r, 300));
+  // Local fallback
   const myRegistrations = JSON.parse(localStorage.getItem(STORAGE_MY_REGS_KEY) || '[]');
-
-  // Check 409 Conflict: Already registered?
-  const alreadyRegistered = myRegistrations.some(r => r.eventId === eventId);
-  if (alreadyRegistered) {
-    const conflictErr = new Error('Already registered for this event (409 Conflict)');
-    conflictErr.status = 409;
-    logApiTransaction('POST', endpoint, 409, { error: 'Conflict', message: conflictErr.message }, conflictErr);
-    throw conflictErr;
+  const already = myRegistrations.some(r => String(r.eventId) === String(eventId));
+  if (already) {
+    const conflict = new Error('Already registered for this event (409 Conflict)');
+    conflict.status = 409;
+    throw conflict;
   }
 
-  // Find event
-  const events = JSON.parse(localStorage.getItem(STORAGE_EVENTS_KEY) || '[]');
-  const event = events.find(e => e.id === eventId);
-  if (!event) {
-    throw new Error('Target event does not exist');
-  }
-
-  const newTicketCode = 'CC-' + Math.random().toString(36).substring(2, 6).toUpperCase() + '-' + Math.floor(1000 + Math.random() * 9000);
-  const newRegistration = {
+  const pass = {
     registrationId: 'reg-' + Date.now(),
-    eventId: event.id,
-    eventTitle: event.title,
-    eventDate: event.date,
-    eventVenue: event.venue,
+    eventId,
+    eventTitle: studentInfo.eventTitle || 'Campus Event',
+    ticketCode: 'CC-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
     registeredAt: new Date().toISOString(),
     userName: studentInfo.name || config.currentUserName,
     userEmail: studentInfo.email || config.currentUserEmail,
-    studentId: studentInfo.studentId || 'CS2023-0491',
-    ticketCode: newTicketCode,
-    status: 'CONFIRMED',
-    category: event.category
+    status: 'CONFIRMED'
   };
 
-  // 1. Update user's registrations
-  myRegistrations.unshift(newRegistration);
+  myRegistrations.unshift(pass);
   localStorage.setItem(STORAGE_MY_REGS_KEY, JSON.stringify(myRegistrations));
-
-  // 2. Update event attendee count
-  event.registeredCount = (event.registeredCount || 0) + 1;
-  localStorage.setItem(STORAGE_EVENTS_KEY, JSON.stringify(events));
-
-  // 3. Update organizer attendee list for this event
-  const allEventRegs = JSON.parse(localStorage.getItem(STORAGE_EVENT_REGS_KEY) || '{}');
-  if (!allEventRegs[eventId]) {
-    allEventRegs[eventId] = [];
-  }
-  allEventRegs[eventId].unshift({
-    registrationId: newRegistration.registrationId,
-    userName: newRegistration.userName,
-    userEmail: newRegistration.userEmail,
-    studentId: newRegistration.studentId,
-    ticketCode: newTicketCode,
-    department: studentInfo.department || 'Computer Science',
-    registeredAt: newRegistration.registeredAt,
-    checkInStatus: 'Attending'
-  });
-  localStorage.setItem(STORAGE_EVENT_REGS_KEY, JSON.stringify(allEventRegs));
-
-  logApiTransaction('POST', endpoint, 201, newRegistration);
-  return { status: 201, data: newRegistration };
+  return { status: 201, data: pass };
 }
 
 /**
  * 4. GET /api/me/registrations
- * Retrieve all event registrations for the logged in student
+ * Retrieve all registrations for current student
  */
 export async function getMyRegistrations() {
   const config = getApiConfig();
@@ -308,36 +393,42 @@ export async function getMyRegistrations() {
 
   if (!config.useMock) {
     try {
-      const url = `${config.baseUrl}${endpoint}`;
-      const res = await fetch(url, {
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${config.token}`
-        }
-      });
-
+      const res = await fetchBackend(endpoint);
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: Failed to fetch user registrations`);
+        throw new Error(`HTTP ${res.status}: Failed to fetch registrations`);
       }
-      const data = await res.json();
-      logApiTransaction('GET', endpoint, res.status, data);
-      return data;
+      const rawRegs = await res.json();
+      
+      // If array of raw registrations, map to UI ticket format
+      const formatted = Array.isArray(rawRegs) ? rawRegs.map(r => ({
+        registrationId: r.id || `reg-${Math.random()}`,
+        eventId: r.event_id || r.eventId,
+        eventTitle: r.events?.title || r.eventTitle || 'Campus Event Pass',
+        eventDate: r.events?.date || r.eventDate || 'Upcoming',
+        eventVenue: r.events?.venue || r.eventVenue || 'Campus Auditorium',
+        ticketCode: r.ticket_code || ('CC-' + String(r.id || '').substring(0, 6).toUpperCase()),
+        registeredAt: r.createdAt || r.created_at || new Date().toISOString(),
+        userName: config.currentUserName,
+        userEmail: config.currentUserEmail,
+        status: 'CONFIRMED',
+        category: r.events?.category || 'Workshop'
+      })) : [];
+
+      logApiTransaction('GET', endpoint, res.status, formatted);
+      return formatted;
     } catch (err) {
       logApiTransaction('GET', endpoint, 'ERR', null, err);
-      console.warn('Real API failed, falling back to mock data:', err);
+      console.warn('Real API failed for user registrations:', err);
     }
   }
 
-  // --- MOCK IMPLEMENTATION ---
-  await new Promise((r) => setTimeout(r, 200));
   const myRegistrations = JSON.parse(localStorage.getItem(STORAGE_MY_REGS_KEY) || '[]');
-  logApiTransaction('GET', endpoint, 200, myRegistrations);
   return myRegistrations;
 }
 
 /**
  * 5. GET /api/events/{id}/registrations
- * Attendee list for owning organizer only
+ * Attendee roster for organizer
  */
 export async function getEventAttendees(eventId) {
   const config = getApiConfig();
@@ -345,53 +436,31 @@ export async function getEventAttendees(eventId) {
 
   if (!config.useMock) {
     try {
-      const url = `${config.baseUrl}${endpoint}`;
-      const res = await fetch(url, {
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${config.token}`
-        }
-      });
-
+      const res = await fetchBackend(endpoint);
       if (res.status === 403) {
-        const forbiddenErr = new Error('Forbidden: Owning organizer only (HTTP 403)');
-        logApiTransaction('GET', endpoint, 403, null, forbiddenErr);
-        throw forbiddenErr;
+        const forbidden = new Error('Forbidden: Owning organizer only (HTTP 403)');
+        forbidden.status = 403;
+        logApiTransaction('GET', endpoint, 403, null, forbidden);
+        throw forbidden;
       }
-
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: Failed to fetch attendee list`);
       }
       const data = await res.json();
       logApiTransaction('GET', endpoint, res.status, data);
-      return data;
+      return Array.isArray(data) ? data : [];
     } catch (err) {
       logApiTransaction('GET', endpoint, 'ERR', null, err);
-      console.warn('Real API failed, fallback to mock data:', err);
+      console.warn('Failed to load attendees:', err);
     }
   }
 
-  // --- MOCK IMPLEMENTATION ---
-  await new Promise((r) => setTimeout(r, 240));
-  const events = JSON.parse(localStorage.getItem(STORAGE_EVENTS_KEY) || '[]');
-  const event = events.find(e => e.id === eventId);
-
-  // Check if current user is owner or organizer
-  if (!config.isOrganizer && (!event || !event.organizer?.isOwner)) {
-    const forbiddenErr = new Error('403 Forbidden: Attendee list is accessible to owning organizer only.');
-    forbiddenErr.status = 403;
-    logApiTransaction('GET', endpoint, 403, null, forbiddenErr);
-    throw forbiddenErr;
-  }
-
   const allEventRegs = JSON.parse(localStorage.getItem(STORAGE_EVENT_REGS_KEY) || '{}');
-  const attendees = allEventRegs[eventId] || [];
-  logApiTransaction('GET', endpoint, 200, attendees);
-  return attendees;
+  return allEventRegs[eventId] || [];
 }
 
 /**
- * Reset mock data to original default
+ * Reset local storage
  */
 export function resetMockData() {
   localStorage.setItem(STORAGE_EVENTS_KEY, JSON.stringify(INITIAL_EVENTS));
@@ -399,4 +468,3 @@ export function resetMockData() {
   localStorage.setItem(STORAGE_EVENT_REGS_KEY, JSON.stringify(INITIAL_EVENT_REGISTRATIONS));
   window.dispatchEvent(new CustomEvent('campusconnect:data-reset'));
 }
-

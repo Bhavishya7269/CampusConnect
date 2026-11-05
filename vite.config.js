@@ -8,10 +8,13 @@ export default defineConfig({
     open: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:5001',
-        changeOrigin: true
+        target: 'https://hello-world-workshop.onrender.com',
+        changeOrigin: true,
+        secure: false,
+        headers: {
+          'X-User-Id': 'afe3e3e8-1da8-4994-ad64-204224881b51'
+        }
       }
     }
   }
 });
-
