@@ -189,6 +189,19 @@ def format_event(raw: Any, registered_count: int = 0) -> Dict[str, Any]:
     title = str(raw.get("title") or "Campus Event")
     title_lower = title.lower()
 
+    # Parse ISO timestamp if available
+    parsed_date = None
+    parsed_time = None
+    ts_val = raw.get("timestamp")
+    if ts_val:
+        try:
+            ts_str = str(ts_val).replace("Z", "+00:00")
+            dt = datetime.fromisoformat(ts_str)
+            parsed_date = dt.strftime("%b %d, %Y")
+            parsed_time = dt.strftime("%I:%M %p")
+        except Exception:
+            pass
+
     # Match preset or default
     preset = None
     for k, v in EVENT_PRESETS.items():
@@ -197,15 +210,32 @@ def format_event(raw: Any, registered_count: int = 0) -> Dict[str, Any]:
             break
 
     if not preset:
+        # Determine category dynamically
+        cat = "Workshop"
+        if "hack" in title_lower:
+            cat = "Hackathon"
+        elif "seminar" in title_lower:
+            cat = "Seminar"
+        elif "summit" in title_lower:
+            cat = "Summit"
+        elif "meetup" in title_lower:
+            cat = "Meetup"
+        elif "night" in title_lower:
+            cat = "Social & Tech"
+        elif "studio" in title_lower or "design" in title_lower:
+            cat = "Design"
+        elif "api" in title_lower or "python" in title_lower or "code" in title_lower:
+            cat = "Coding"
+
         preset = {
-            "category": "Hackathon" if "hack" in title_lower else "Workshop",
-            "tagline": "Flagship university event bringing students, creators, and innovators together.",
-            "date": "Nov 15, 2026",
-            "startTime": "10:00 AM",
+            "category": cat,
+            "tagline": f"Exciting campus event: {title}. Join students, creators, and innovators.",
+            "date": parsed_date or "Nov 15, 2026",
+            "startTime": parsed_time or "10:00 AM",
             "endTime": "04:00 PM",
             "venue": "Main Campus Auditorium",
             "bannerUrl": "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=1200&auto=format&fit=crop&q=80",
-            "description": "Join fellow students for an immersive campus experience featuring collaborative projects, guest speakers, and skill-building activities.",
+            "description": f"Join fellow students for {title}, featuring collaborative projects, guest speakers, and skill-building activities.",
             "highlights": [
                 "Certificate of Participation for all attendees",
                 "Hands-on interactive learning sessions",
@@ -223,8 +253,8 @@ def format_event(raw: Any, registered_count: int = 0) -> Dict[str, Any]:
         "title": title,
         "tagline": raw.get("tagline") or preset["tagline"],
         "category": raw.get("category") or preset["category"],
-        "date": raw.get("date") or preset["date"],
-        "startTime": raw.get("startTime") or preset["startTime"],
+        "date": raw.get("date") or parsed_date or preset["date"],
+        "startTime": raw.get("startTime") or parsed_time or preset["startTime"],
         "endTime": raw.get("endTime") or preset["endTime"],
         "venue": raw.get("venue") or preset["venue"],
         "isOnline": bool(raw.get("isOnline", False)),
@@ -232,7 +262,7 @@ def format_event(raw: Any, registered_count: int = 0) -> Dict[str, Any]:
         "description": raw.get("description") or preset["description"],
         "highlights": raw.get("highlights") or preset["highlights"],
         "schedule": raw.get("schedule") or [
-            {"time": "10:00 AM", "title": "Check-in & Welcome Keynote"},
+            {"time": parsed_time or "10:00 AM", "title": "Check-in & Welcome Keynote"},
             {"time": "11:30 AM", "title": "Hands-on Main Session"},
             {"time": "02:00 PM", "title": "Demonstrations & Presentations"},
             {"time": "04:00 PM", "title": "Awards & Wrap-up"}
